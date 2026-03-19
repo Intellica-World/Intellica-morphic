@@ -8,17 +8,17 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 const externalLinks = [
   {
     name: 'X',
-    href: 'https://x.com/morphic_ai',
+    href: 'https://x.com/intellica_world',
     icon: <SiX className="mr-2 h-4 w-4" />
   },
   {
     name: 'Discord',
-    href: 'https://discord.gg/zRxaseCuGq',
+    href: 'https://discord.gg/intellica',
     icon: <SiDiscord className="mr-2 h-4 w-4" />
   },
   {
     name: 'GitHub',
-    href: 'https://git.new/morphic',
+    href: 'https://github.com/Intellica-World',
     icon: <SiGithub className="mr-2 h-4 w-4" />
   }
 ]
