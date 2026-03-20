@@ -3,6 +3,7 @@ import { ModelMessage, UIMessageStreamWriter } from 'ai'
 import { createRelatedQuestionsStream } from '@/lib/agents/generate-related-questions'
 import { generateId } from '@/lib/db/schema'
 import { relatedSchema } from '@/lib/schema/related'
+import { sanitizeModelMessages } from '@/lib/utils/message-utils'
 
 /**
  * Generates and streams related questions if there are tool calls in the response
@@ -33,7 +34,7 @@ export async function streamRelatedQuestions(
     })
 
     const relatedQuestionsResult = createRelatedQuestionsStream(
-      messages,
+      sanitizeModelMessages(messages),
       abortSignal,
       parentTraceId
     )

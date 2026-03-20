@@ -142,21 +142,36 @@ export function hasToolCalls(message: UIMessage | null): boolean {
  * @returns Sanitized copy with empty-image parts removed
  */
 export function sanitizeUIMessages(messages: UIMessage[]): UIMessage[] {
-  return messages.map(message => {
+  return messages.map((message, msgIdx) => {
     if (!message.parts || message.parts.length === 0) return message
 
-    const sanitizedParts = message.parts.filter((part: any) => {
+    const sanitizedParts = message.parts.filter((part: any, partIdx: number) => {
       if (part.type !== 'file') return true
-      const mediaType: string = part.mediaType ?? ''
-      if (!mediaType.startsWith('image/')) return true
+      const mediaType: string = (part.mediaType ?? '').toLowerCase()
+      if (!mediaType.startsWith('image/') && mediaType !== 'image') return true
 
-      const url: string = typeof part.url === 'string' ? part.url : ''
-      if (url === '') return false
+      const url: string = typeof part.url === 'string' ? part.url : (part.url == null ? '' : String(part.url))
+      if (url.trim() === '') {
+        console.log(`[sanitizeUIMessages] Dropped empty-url image at messages[${msgIdx}].parts[${partIdx}] mediaType=${part.mediaType}`)
+        return false
+      }
 
+      const lowerUrl = url.toLowerCase()
       const b64Marker = ';base64,'
-      const idx = url.indexOf(b64Marker)
-      if (idx === -1) return url.length > 0
-      return url.slice(idx + b64Marker.length).length > 0
+      const idx = lowerUrl.indexOf(b64Marker)
+      if (idx === -1) {
+        if (lowerUrl.startsWith('data:')) {
+          console.log(`[sanitizeUIMessages] Dropped malformed data-url image at messages[${msgIdx}].parts[${partIdx}]`)
+          return false
+        }
+        return url.trim().length > 0
+      }
+      const base64Data = url.slice(idx + b64Marker.length).trim()
+      if (base64Data.length === 0) {
+        console.log(`[sanitizeUIMessages] Dropped empty-base64 image at messages[${msgIdx}].parts[${partIdx}] url_length=${url.length}`)
+        return false
+      }
+      return true
     })
 
     if (sanitizedParts.length === message.parts.length) return message
@@ -177,17 +192,30 @@ export function sanitizeUIMessages(messages: UIMessage[]): UIMessage[] {
  */
 function isValidImagePart(part: any): boolean {
   if (part.type === 'file') {
-    const mediaType: string = part.mediaType ?? ''
-    if (!mediaType.startsWith('image/')) return true
+    const mediaType: string = (part.mediaType ?? '').toLowerCase()
+    if (!mediaType.startsWith('image/') && mediaType !== 'image') return true
 
-    const data: string = typeof part.data === 'string' ? part.data : ''
-    if (data === '') return false
+    let data: string
+    if (typeof part.data === 'string') {
+      data = part.data
+    } else if (part.data == null) {
+      data = ''
+    } else if (typeof part.data === 'object' && part.data instanceof Uint8Array) {
+      return part.data.length > 0
+    } else {
+      data = String(part.data)
+    }
+
+    if (data.trim() === '') return false
 
     const b64Marker = ';base64,'
-    const markerIdx = data.indexOf(b64Marker)
-    if (markerIdx === -1) return data.length > 0
+    const markerIdx = data.toLowerCase().indexOf(b64Marker)
+    if (markerIdx === -1) {
+      if (data.toLowerCase().startsWith('data:')) return false
+      return data.trim().length > 0
+    }
 
-    const base64Data = data.slice(markerIdx + b64Marker.length)
+    const base64Data = data.slice(markerIdx + b64Marker.length).trim()
     return base64Data.length > 0
   }
 
@@ -195,14 +223,17 @@ function isValidImagePart(part: any): boolean {
     const src = part.image ?? part.source ?? part.data
     if (src == null || src === '') return false
     if (typeof src === 'string') {
+      if (src.trim() === '') return false
       const b64Marker = ';base64,'
-      const markerIdx = src.indexOf(b64Marker)
-      if (markerIdx !== -1) return src.slice(markerIdx + b64Marker.length).length > 0
-      return src.length > 0
+      const markerIdx = src.toLowerCase().indexOf(b64Marker)
+      if (markerIdx !== -1) return src.slice(markerIdx + b64Marker.length).trim().length > 0
+      if (src.toLowerCase().startsWith('data:')) return false
+      return src.trim().length > 0
     }
     if (typeof src === 'object') {
+      if (src instanceof Uint8Array) return src.length > 0
       const data = src.base64 ?? src.data ?? ''
-      return typeof data === 'string' && data.length > 0
+      return typeof data === 'string' && data.trim().length > 0
     }
   }
 
@@ -227,10 +258,10 @@ export function sanitizeModelMessages(messages: ModelMessage[]): ModelMessage[] 
 
     const sanitizedContent = message.content.filter((part, partIdx) => {
       const valid = isValidImagePart(part)
-      if (!valid && process.env.NODE_ENV !== 'production') {
-        console.warn(
+      if (!valid) {
+        console.log(
           `[sanitizeModelMessages] Dropped empty image at messages[${msgIdx}].content[${partIdx}]`,
-          { type: part.type, mediaType: (part as any).mediaType }
+          { type: (part as any).type, mediaType: (part as any).mediaType }
         )
       }
       return valid
