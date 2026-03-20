@@ -129,3 +129,36 @@ export function hasToolCalls(message: UIMessage | null): boolean {
       part.type && (part.type.startsWith('tool-') || part.type === 'tool-call')
   )
 }
+
+/**
+ * Removes image content parts with empty or missing base64 data from model messages.
+ *
+ * Anthropic's API (and others) return HTTP 400 if an image part has an empty
+ * base64 string. This can happen when conversation history is loaded from the
+ * database and the original image bytes are no longer present.
+ *
+ * @param messages - Array of ModelMessages to sanitize
+ * @returns Sanitized messages with invalid image parts removed
+ */
+export function sanitizeModelMessages(messages: ModelMessage[]): ModelMessage[] {
+  return messages.map(message => {
+    if (!Array.isArray(message.content)) return message
+
+    const sanitizedContent = message.content.filter(part => {
+      if (part.type !== 'image') return true
+      const source = (part as any).image
+      if (typeof source === 'string') {
+        return source.length > 0
+      }
+      if (source && typeof source === 'object') {
+        const data = source.base64 ?? (source as any).data ?? ''
+        return typeof data === 'string' && data.length > 0
+      }
+      return false
+    })
+
+    if (sanitizedContent.length === message.content.length) return message
+
+    return { ...message, content: sanitizedContent } as ModelMessage
+  })
+}

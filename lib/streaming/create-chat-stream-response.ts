@@ -21,7 +21,7 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { getTextFromParts } from '../utils/message-utils'
+import { getTextFromParts, sanitizeModelMessages } from '../utils/message-utils'
 import { perfLog, perfTime } from '../utils/perf-logging'
 
 import { persistStreamResults } from './helpers/persist-stream-results'
@@ -42,13 +42,16 @@ export async function createChatStreamResponse(
     model,
     chatId,
     userId,
-    trigger,
+    trigger = 'submit-message',
     messageId,
     abortSignal,
-    isNewChat,
-    searchMode,
+    isNewChat = false,
+    searchMode = 'adaptive',
     modelType
   } = config
+
+  const startTime = performance.now()
+  perfLog(`createChatStreamResponse - Start: trigger=${trigger}`)
 
   // Verify that chatId is provided
   if (!chatId) {
@@ -165,6 +168,9 @@ export async function createChatStreamResponse(
             )
           }
         }
+
+        // Strip any image parts with empty base64 data — Anthropic returns HTTP 400 if present
+        modelMessages = sanitizeModelMessages(modelMessages)
 
         // Start title generation in parallel if it's a new chat
         if (!initialChat && message) {

@@ -19,6 +19,7 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
+import { sanitizeModelMessages } from '../utils/message-utils'
 
 import { streamRelatedQuestions } from './helpers/stream-related-questions'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
@@ -86,6 +87,9 @@ export async function createEphemeralChatStreamResponse(
           const maxTokens = getMaxAllowedTokens(model)
           modelMessages = truncateMessages(modelMessages, maxTokens, model.id)
         }
+
+        // Strip any image parts with empty base64 data — Anthropic returns HTTP 400 if present
+        modelMessages = sanitizeModelMessages(modelMessages)
 
         const researchAgent = researcher({
           model: `${model.providerId}:${model.id}`,
