@@ -131,30 +131,109 @@ export function hasToolCalls(message: UIMessage | null): boolean {
 }
 
 /**
+ * Strips UIMessage parts that carry empty image data before they reach
+ * convertToModelMessages().  This is the first line of defence — it prevents
+ * poisoned DB records from ever reaching the model layer.
+ *
+ * UIMessage file parts look like:
+ *   { type: 'file', mediaType: 'image/jpeg', url: 'data:image/jpeg;base64,' }
+ *
+ * @param messages - UIMessage array from DB / UI state
+ * @returns Sanitized copy with empty-image parts removed
+ */
+export function sanitizeUIMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.map(message => {
+    if (!message.parts || message.parts.length === 0) return message
+
+    const sanitizedParts = message.parts.filter((part: any) => {
+      if (part.type !== 'file') return true
+      const mediaType: string = part.mediaType ?? ''
+      if (!mediaType.startsWith('image/')) return true
+
+      const url: string = typeof part.url === 'string' ? part.url : ''
+      if (url === '') return false
+
+      const b64Marker = ';base64,'
+      const idx = url.indexOf(b64Marker)
+      if (idx === -1) return url.length > 0
+      return url.slice(idx + b64Marker.length).length > 0
+    })
+
+    if (sanitizedParts.length === message.parts.length) return message
+    return { ...message, parts: sanitizedParts }
+  })
+}
+
+/**
+ * Returns true if a model message content part is a valid image/file part.
+ *
+ * After convertToModelMessages(), image attachments have:
+ *   { type: 'file', mediaType: 'image/jpeg', data: 'data:image/jpeg;base64,<bytes>' }
+ *
+ * When the image bytes are missing (empty upload, DB record with no bytes),
+ * `data` ends with 'base64,' and nothing after — Anthropic returns HTTP 400.
+ *
+ * We also guard the legacy `type: 'image'` shape used by some providers.
+ */
+function isValidImagePart(part: any): boolean {
+  if (part.type === 'file') {
+    const mediaType: string = part.mediaType ?? ''
+    if (!mediaType.startsWith('image/')) return true
+
+    const data: string = typeof part.data === 'string' ? part.data : ''
+    if (data === '') return false
+
+    const b64Marker = ';base64,'
+    const markerIdx = data.indexOf(b64Marker)
+    if (markerIdx === -1) return data.length > 0
+
+    const base64Data = data.slice(markerIdx + b64Marker.length)
+    return base64Data.length > 0
+  }
+
+  if (part.type === 'image') {
+    const src = part.image ?? part.source ?? part.data
+    if (src == null || src === '') return false
+    if (typeof src === 'string') {
+      const b64Marker = ';base64,'
+      const markerIdx = src.indexOf(b64Marker)
+      if (markerIdx !== -1) return src.slice(markerIdx + b64Marker.length).length > 0
+      return src.length > 0
+    }
+    if (typeof src === 'object') {
+      const data = src.base64 ?? src.data ?? ''
+      return typeof data === 'string' && data.length > 0
+    }
+  }
+
+  return true
+}
+
+/**
  * Removes image content parts with empty or missing base64 data from model messages.
  *
- * Anthropic's API (and others) return HTTP 400 if an image part has an empty
- * base64 string. This can happen when conversation history is loaded from the
- * database and the original image bytes are no longer present.
+ * Anthropic's API returns HTTP 400 if any image part has an empty base64 string.
+ * This happens when conversation history is loaded from the database and the
+ * original image bytes are no longer present in the stored record.
+ *
+ * Covers both the AI SDK `type:'file'` shape and legacy `type:'image'` shapes.
  *
  * @param messages - Array of ModelMessages to sanitize
  * @returns Sanitized messages with invalid image parts removed
  */
 export function sanitizeModelMessages(messages: ModelMessage[]): ModelMessage[] {
-  return messages.map(message => {
+  return messages.map((message, msgIdx) => {
     if (!Array.isArray(message.content)) return message
 
-    const sanitizedContent = message.content.filter(part => {
-      if (part.type !== 'image') return true
-      const source = (part as any).image
-      if (typeof source === 'string') {
-        return source.length > 0
+    const sanitizedContent = message.content.filter((part, partIdx) => {
+      const valid = isValidImagePart(part)
+      if (!valid && process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `[sanitizeModelMessages] Dropped empty image at messages[${msgIdx}].content[${partIdx}]`,
+          { type: part.type, mediaType: (part as any).mediaType }
+        )
       }
-      if (source && typeof source === 'object') {
-        const data = source.base64 ?? (source as any).data ?? ''
-        return typeof data === 'string' && data.length > 0
-      }
-      return false
+      return valid
     })
 
     if (sanitizedContent.length === message.content.length) return message

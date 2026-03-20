@@ -19,7 +19,7 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { sanitizeModelMessages } from '../utils/message-utils'
+import { sanitizeModelMessages, sanitizeUIMessages } from '../utils/message-utils'
 
 import { streamRelatedQuestions } from './helpers/stream-related-questions'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
@@ -70,9 +70,11 @@ export async function createEphemeralChatStreamResponse(
     execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
       try {
         const isOpenAI = `${model.providerId}:${model.id}`.startsWith('openai:')
+        // Sanitize UIMessages BEFORE conversion — strips empty-image parts from DB history
+        const sanitizedUIMessages = sanitizeUIMessages(messages)
         const messagesToConvert = isOpenAI
-          ? stripReasoningParts(messages)
-          : messages
+          ? stripReasoningParts(sanitizedUIMessages)
+          : sanitizedUIMessages
 
         let modelMessages = await convertToModelMessages(messagesToConvert)
 

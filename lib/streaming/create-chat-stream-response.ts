@@ -21,7 +21,7 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { getTextFromParts, sanitizeModelMessages } from '../utils/message-utils'
+import { getTextFromParts, sanitizeModelMessages, sanitizeUIMessages } from '../utils/message-utils'
 import { perfLog, perfTime } from '../utils/perf-logging'
 
 import { persistStreamResults } from './helpers/persist-stream-results'
@@ -142,9 +142,11 @@ export async function createChatStreamResponse(
         // OpenAI's Responses API requires reasoning items and their following items to be kept together
         // See: https://github.com/vercel/ai/issues/11036
         const isOpenAI = context.modelId.startsWith('openai:')
+        // Sanitize UIMessages BEFORE conversion — strips empty-image parts from DB history
+        const sanitizedUIMessages = sanitizeUIMessages(messagesToModel)
         const messagesToConvert = isOpenAI
-          ? stripReasoningParts(messagesToModel)
-          : messagesToModel
+          ? stripReasoningParts(sanitizedUIMessages)
+          : sanitizedUIMessages
 
         // Convert to model messages and apply context window management
         let modelMessages = await convertToModelMessages(messagesToConvert)
