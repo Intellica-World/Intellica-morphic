@@ -36,4 +36,9 @@ yarn-error.log*
 next-env.d.ts
 
 # temporary files
-.tmp/
+.tmp/.env.vercel.*
+debug-*.js
+test-message*.js
+test-multi*.js
+test-new*.js
+test-scenarios*.js

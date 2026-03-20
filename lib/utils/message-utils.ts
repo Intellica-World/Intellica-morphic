@@ -131,6 +131,20 @@ export function hasToolCalls(message: UIMessage | null): boolean {
 }
 
 /**
+ * Client-side sanitizer: strips UIMessage parts with empty/invalid image data
+ * BEFORE they are included in the request body sent from the browser.
+ *
+ * This is the earliest possible defence — the poisoned part never leaves the
+ * browser at all, so it cannot contaminate the server-side conversion pipeline.
+ *
+ * Identical logic to sanitizeUIMessages but safe to import in browser bundles
+ * (no server-only imports).
+ */
+export function sanitizeMessagesForSend(messages: UIMessage[]): UIMessage[] {
+  return sanitizeUIMessages(messages)
+}
+
+/**
  * Strips UIMessage parts that carry empty image data before they reach
  * convertToModelMessages().  This is the first line of defence — it prevents
  * poisoned DB records from ever reaching the model layer.

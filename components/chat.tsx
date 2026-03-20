@@ -16,6 +16,7 @@ import {
   isToolTypePart
 } from '@/lib/types/dynamic-tools'
 import { cn } from '@/lib/utils'
+import { sanitizeMessagesForSend } from '@/lib/utils/message-utils'
 
 import { useFileDropzone } from '@/hooks/use-file-dropzone'
 
@@ -104,7 +105,7 @@ export function Chat({
             trigger, // Use AI SDK's default trigger value directly
             chatId: chatId,
             messageId,
-            ...(isGuest ? { messages } : {}),
+            ...(isGuest ? { messages: sanitizeMessagesForSend(messages) } : {}),
             message:
               trigger === 'regenerate-message' &&
               messageToRegenerate?.role === 'user'
