@@ -24,8 +24,8 @@
           "providerId": "anthropic"
         },
         "quality": {
-          "id": "claude-opus-4-5",
-          "name": "Claude Opus",
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet",
           "provider": "Anthropic",
           "providerId": "anthropic"
         }

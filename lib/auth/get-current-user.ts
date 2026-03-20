@@ -36,7 +36,9 @@ export async function getCurrentUserId() {
       )
     }
 
-    return process.env.ANONYMOUS_USER_ID || 'anonymous-user'
+    // Return null so visitors are treated as true guests and use the
+    // ephemeral (no-database) chat path. ENABLE_GUEST_CHAT=true allows them through.
+    return null
   }
 
   const user = await getCurrentUser()

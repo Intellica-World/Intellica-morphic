@@ -22,6 +22,8 @@ export async function prepareMessages(
   const startTime = performance.now()
   perfLog(`prepareMessages - Start: trigger=${trigger}, isNewChat=${isNewChat}`)
 
+  let messagesToReturn: UIMessage[] = []
+
   if (trigger === 'regenerate-message' && messageId) {
     // Handle regeneration - use initialChat if available to avoid DB call
     let currentChat = initialChat

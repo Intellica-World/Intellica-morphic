@@ -136,6 +136,15 @@ export async function POST(req: Request) {
       `createChatStreamResponse - Start: model=${selectedModel.providerId}:${selectedModel.id}, searchMode=${searchMode}, modelType=${modelType}`
     )
 
+    // Convert string message to proper message object for AI SDK compatibility
+    const messageObject = typeof message === 'string' 
+      ? {
+          role: 'user',
+          content: message,
+          parts: [{ type: 'text', text: message }]
+        }
+      : message
+
     const response = isGuest
       ? await createEphemeralChatStreamResponse({
           messages: Array.isArray(messages) ? messages : [],
@@ -146,7 +155,7 @@ export async function POST(req: Request) {
           chatId
         })
       : await createChatStreamResponse({
-          message,
+          message: messageObject,
           model: selectedModel,
           chatId,
           userId: userId, // userId is guaranteed to be non-null after authentication check above
