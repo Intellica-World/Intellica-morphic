@@ -182,11 +182,14 @@ export function ChatPanel({
       )}
     >
       {messages.length === 0 && (
-        <div className="mb-10 flex flex-col items-center gap-4">
+        <div className="mb-8 flex flex-col items-center gap-3">
           <IconBlinkingLogo className="size-12" />
-          <h1 className="text-2xl font-medium text-foreground">
+          <h1 className="text-2xl font-semibold text-foreground">
             What would you like to know?
           </h1>
+          <p className="text-sm text-muted-foreground text-center max-w-md">
+            Law · Business · Property · Medical · Markets · Research
+          </p>
         </div>
       )}
       {uploadedFiles.length > 0 && (

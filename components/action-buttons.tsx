@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  BarChart2,
+  Briefcase,
+  Building2,
   FileText,
   HelpCircle,
   LucideIcon,
   Newspaper,
   Scale,
-  Search
+  Search,
+  Stethoscope
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -25,31 +29,15 @@ interface ActionCategory {
 }
 
 const actionCategories: ActionCategory[] = [
-  {
-    icon: Search,
-    label: 'Research',
-    key: 'research'
-  },
-  {
-    icon: Scale,
-    label: 'Compare',
-    key: 'compare'
-  },
-  {
-    icon: Newspaper,
-    label: 'Latest',
-    key: 'latest'
-  },
-  {
-    icon: FileText,
-    label: 'Summarize',
-    key: 'summarize'
-  },
-  {
-    icon: HelpCircle,
-    label: 'Explain',
-    key: 'explain'
-  }
+  { icon: Search,      label: 'Research',   key: 'research'   },
+  { icon: Scale,       label: 'Law',        key: 'law'        },
+  { icon: Briefcase,   label: 'Business',   key: 'business'   },
+  { icon: Building2,   label: 'Property',   key: 'property'   },
+  { icon: Stethoscope, label: 'Medical',    key: 'medical'    },
+  { icon: BarChart2,   label: 'Markets',    key: 'markets'    },
+  { icon: Newspaper,   label: 'Latest',     key: 'latest'     },
+  { icon: FileText,    label: 'Summarize',  key: 'summarize'  },
+  { icon: HelpCircle,  label: 'Explain',    key: 'explain'    }
 ]
 
 const promptSamples: Record<string, string[]> = {
@@ -59,11 +47,35 @@ const promptSamples: Record<string, string[]> = {
     'What are the key trends in robotics?',
     'What are the latest breakthroughs in renewable energy?'
   ],
-  compare: [
-    'Tesla vs BYD vs Toyota comparison',
-    'Compare Next.js, Remix, and Astro',
-    'AWS vs GCP vs Azure',
-    'iPhone vs Android ecosystem comparison'
+  law: [
+    'What are my rights if a landlord refuses to return my deposit?',
+    'How do I set up a UK limited company?',
+    'What does GDPR require for a small business?',
+    'Can my employer change my contract without agreement?'
+  ],
+  business: [
+    'Best offshore structures for a UK business owner',
+    'How do I register a company in the UAE free zone?',
+    'What is the most tax-efficient way to pay myself?',
+    'Compare Ltd vs LLP for a consulting business'
+  ],
+  property: [
+    'How does planning permission work in the UK?',
+    'What is the process to buy a commercial property?',
+    'What are permitted development rights?',
+    'How to value a buy-to-let investment property'
+  ],
+  medical: [
+    'What are the symptoms of type 2 diabetes?',
+    'Explain how statins work and their side effects',
+    'What does a high CRP blood test result mean?',
+    'What are the stages of hypertension?'
+  ],
+  markets: [
+    'What is the current outlook for gold prices?',
+    'Explain Bitcoin halving and its effect on price',
+    'What sectors perform best during a recession?',
+    'How do central bank interest rate decisions affect markets?'
   ],
   latest: [
     'Latest news today',
@@ -163,7 +175,7 @@ export function ActionButtons({
   }, [activeCategory, inputRef])
 
   // Calculate max height needed for samples (4 items * ~40px + padding)
-  const containerHeight = 'h-[180px]'
+  const containerHeight = 'h-[200px]'
 
   return (
     <div
