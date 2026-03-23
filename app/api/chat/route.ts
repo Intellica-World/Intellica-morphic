@@ -4,6 +4,15 @@ import { cookies } from 'next/headers'
 import { loadChat } from '@/lib/actions/chat'
 import { calculateConversationTurn, trackChatEvent } from '@/lib/analytics'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import {
+  applyIntellicaMigrationHeaders,
+  INTELLICA_PROFILE_COOKIE_NAME,
+  isIntellicaFullModeEnabled,
+  resolveIntellicaRequestContext,
+  resolveIntellicaModelType,
+  resolveIntellicaSearchMode,
+  withIntellicaAssistantContext
+} from '@/lib/intellica'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
 import { createChatStreamResponse } from '@/lib/streaming/create-chat-stream-response'
@@ -27,7 +36,16 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { message, messages, chatId, trigger, messageId, isNewChat } = body
+    const {
+      message,
+      messages,
+      chatId,
+      trigger,
+      messageId,
+      isNewChat,
+      userLocation,
+      userProfile
+    } = body
 
     perfLog(
       `API Route - Start: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`
@@ -84,24 +102,60 @@ export async function POST(req: Request) {
     }
 
     const cookieStore = await cookies()
+    const normalizedProfile =
+      userProfile && typeof userProfile === 'object' ? userProfile : null
+    const normalizedLocation =
+      userLocation && typeof userLocation === 'object' ? userLocation : null
+    const intellicaContext = await resolveIntellicaRequestContext({
+      request: req,
+      cookieValue:
+        cookieStore.get(INTELLICA_PROFILE_COOKIE_NAME)?.value ?? null,
+      rawProfile: normalizedProfile
+        ? {
+            ...normalizedProfile,
+            ...(normalizedLocation ? { location: normalizedLocation } : {})
+          }
+        : normalizedLocation
+          ? { location: normalizedLocation }
+          : null
+    })
 
-    // Get search mode from cookie
+    if (intellicaContext.cookieValue) {
+      cookieStore.set(
+        INTELLICA_PROFILE_COOKIE_NAME,
+        intellicaContext.cookieValue,
+        {
+          httpOnly: false,
+          maxAge: 60 * 60 * 24 * 365,
+          path: '/',
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production'
+        }
+      )
+    }
+
+    const fullModeEnabled = isIntellicaFullModeEnabled()
     const searchModeCookie = cookieStore.get('searchMode')?.value
-    const searchMode: SearchMode =
-      searchModeCookie && ['quick', 'adaptive'].includes(searchModeCookie)
-        ? (searchModeCookie as SearchMode)
-        : 'quick'
-
     const isCloudDeployment = process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true'
-    const forceSpeed = isGuest || isCloudDeployment
-    const modelCookieStore = forceSpeed
-      ? ({
-          get: (name: string) =>
-            name === 'modelType'
-              ? ({ value: 'speed' } as const)
-              : cookieStore.get(name)
-        } as typeof cookieStore)
-      : cookieStore
+    const forceSpeed = !fullModeEnabled && (isGuest || isCloudDeployment)
+    const searchMode: SearchMode = resolveIntellicaSearchMode({
+      cookieValue: searchModeCookie,
+      fullModeEnabled
+    })
+    const modelTypePreference = resolveIntellicaModelType({
+      cookieValue: cookieStore.get('modelType')?.value,
+      forceSpeed,
+      fullModeEnabled
+    })
+    const modelCookieStore =
+      forceSpeed || fullModeEnabled
+        ? ({
+            get: (name: string) =>
+              name === 'modelType'
+                ? ({ value: modelTypePreference } as const)
+                : cookieStore.get(name)
+          } as typeof cookieStore)
+        : cookieStore
 
     // Select the appropriate model based on model type preference and search mode
     const selectedModel = selectModel({
@@ -119,13 +173,8 @@ export async function POST(req: Request) {
       )
     }
 
-    // Resolve model type from cookie (forced to speed for guests and cloud)
     const modelTypeCookie = cookieStore.get('modelType')?.value
-    const resolvedModelType =
-      modelTypeCookie === 'quality' || modelTypeCookie === 'speed'
-        ? modelTypeCookie
-        : undefined
-    const modelType = forceSpeed ? 'speed' : resolvedModelType
+    const modelType = modelTypePreference
     if (!isGuest) {
       const overallLimitResponse = await checkAndEnforceOverallChatLimit(userId)
       if (overallLimitResponse) return overallLimitResponse
@@ -137,17 +186,25 @@ export async function POST(req: Request) {
     )
 
     // Convert string message to proper message object for AI SDK compatibility
-    const messageObject = typeof message === 'string' 
-      ? {
-          role: 'user',
-          content: message,
-          parts: [{ type: 'text', text: message }]
-        }
-      : message
+    const messageObject =
+      typeof message === 'string'
+        ? {
+            role: 'user',
+            content: message,
+            parts: [{ type: 'text', text: message }]
+          }
+        : message ?? null
+
+    const guestMessages = withIntellicaAssistantContext(
+      Array.isArray(messages) ? messages : [],
+      intellicaContext.assistantContext
+    )
+    // Keep all answers on the grounded researcher/mind pipeline until the
+    // specialist agents can return real responses instead of scaffold text.
 
     const response = isGuest
       ? await createEphemeralChatStreamResponse({
-          messages: Array.isArray(messages) ? messages : [],
+          messages: guestMessages,
           model: selectedModel,
           abortSignal,
           searchMode,
@@ -163,6 +220,7 @@ export async function POST(req: Request) {
           messageId,
           abortSignal,
           isNewChat,
+          assistantContext: intellicaContext.assistantContext,
           searchMode,
           modelType
         })
@@ -187,7 +245,7 @@ export async function POST(req: Request) {
         if (!isGuest && userId) {
           await trackChatEvent({
             searchMode,
-            modelType: modelTypeCookie === 'quality' ? 'quality' : 'speed',
+            modelType,
             conversationTurn,
             isNewChat: isNewChat ?? false,
             trigger:
@@ -217,7 +275,7 @@ export async function POST(req: Request) {
     perfLog(`Total Time: ${totalTime.toFixed(2)}ms`)
     perfLog(`================`)
 
-    return response
+    return applyIntellicaMigrationHeaders(response, intellicaContext.receipt)
   } catch (error) {
     console.error('API route error:', error)
     return new Response('Error processing your request', {

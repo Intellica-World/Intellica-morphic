@@ -7,6 +7,7 @@ import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { toast } from 'sonner'
 
+import { playVoiceResponse } from '@/hooks/use-voice-playback'
 import { generateId } from '@/lib/db/schema'
 import { UploadedFile } from '@/lib/types'
 import type { UIMessage } from '@/lib/types/ai'
@@ -16,14 +17,21 @@ import {
   isToolTypePart
 } from '@/lib/types/dynamic-tools'
 import { cn } from '@/lib/utils'
+import { getTextFromParts } from '@/lib/utils/message-utils'
 import { sanitizeMessagesForSend } from '@/lib/utils/message-utils'
 
 import { useFileDropzone } from '@/hooks/use-file-dropzone'
+import {
+  clearGuestChatSession,
+  useGuestChatSession
+} from '@/hooks/use-guest-chat-session'
+import { useIntellicaProfile } from '@/hooks/use-intellica-profile'
 
 import { ChatMessages } from './chat-messages'
 import { ChatPanel } from './chat-panel'
 import { DragOverlay } from './drag-overlay'
 import { ErrorModal } from './error-modal'
+import { IntellicaProfileBanner } from './intellica-profile-banner'
 
 // Define section structure
 interface ChatSection {
@@ -44,6 +52,8 @@ export function Chat({
   isGuest?: boolean
 }) {
   const router = useRouter()
+  const lastAutoSpokenMessageIdRef = useRef<string | null>(null)
+  const previousIsLoadingRef = useRef(false)
 
   // Generate a stable chatId on the client side
   // - If providedId exists (e.g., /search/[id]), use it for existing chats
@@ -54,6 +64,9 @@ export function Chat({
   const handleNewChat = () => {
     const newId = generateId()
     setChatId(newId)
+    if (isGuest) {
+      clearGuestChatSession()
+    }
     // Clear other chat-related state that persists due to Next.js 16 component caching
     setInput('')
     setUploadedFiles([])
@@ -63,6 +76,16 @@ export function Chat({
       message: ''
     })
   }
+
+  const {
+    dismissNamePrompt,
+    locationError,
+    locationLabel,
+    locationLoading,
+    saveDisplayName,
+    shouldPromptForName,
+    userProfile
+  } = useIntellicaProfile()
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -106,6 +129,10 @@ export function Chat({
             chatId: chatId,
             messageId,
             ...(isGuest ? { messages: sanitizeMessagesForSend(messages) } : {}),
+            ...(userProfile ? { userProfile } : {}),
+            ...(userProfile.location
+              ? { userLocation: userProfile.location }
+              : {}),
             message:
               trigger === 'regenerate-message' &&
               messageToRegenerate?.role === 'user'
@@ -192,6 +219,64 @@ export function Chat({
     },
     experimental_throttle: 100,
     generateId
+  })
+  const isLoading = status === 'submitted' || status === 'streaming'
+
+  useEffect(() => {
+    const wasLoading = previousIsLoadingRef.current
+    previousIsLoadingRef.current = isLoading
+
+    if (!wasLoading || isLoading) {
+      return
+    }
+
+    const latestAssistantMessage = [...messages]
+      .reverse()
+      .find(message => message.role === 'assistant')
+
+    if (!latestAssistantMessage) {
+      return
+    }
+
+    if (lastAutoSpokenMessageIdRef.current === latestAssistantMessage.id) {
+      return
+    }
+
+    const messageText = getTextFromParts(latestAssistantMessage.parts).trim()
+    if (!messageText) {
+      return
+    }
+
+    lastAutoSpokenMessageIdRef.current = latestAssistantMessage.id
+
+    void playVoiceResponse(latestAssistantMessage.id, messageText).catch(
+      error => {
+        const message =
+          error instanceof Error ? error.message : 'Voice playback failed'
+
+        if (
+          error instanceof Error &&
+          (error.name === 'NotAllowedError' ||
+            /user gesture|not allowed|autoplay/i.test(error.message))
+        ) {
+          toast.error(
+            'Voice is ready, but your browser blocked autoplay. Tap the speaker button once to enable it.'
+          )
+          return
+        }
+
+        toast.error(message)
+      }
+    )
+  }, [isLoading, messages])
+
+  useGuestChatSession({
+    chatId,
+    isGuest,
+    messages,
+    savedMessages,
+    setChatId,
+    setMessages
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -467,6 +552,14 @@ export function Chat({
         onUpdateMessage={handleUpdateAndReloadMessage}
         reload={handleReloadFrom}
         error={error}
+      />
+      <IntellicaProfileBanner
+        open={shouldPromptForName}
+        onSaveName={saveDisplayName}
+        onDismiss={dismissNamePrompt}
+        locationError={locationError}
+        locationLabel={locationLabel}
+        locationLoading={locationLoading}
       />
       <ChatPanel
         chatId={chatId}

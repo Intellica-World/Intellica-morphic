@@ -37,8 +37,15 @@ next-env.d.ts
 
 # temporary files
 .tmp/.env.vercel.*
+/.env.vercel.*
 debug-*.js
 test-message*.js
 test-multi*.js
 test-new*.js
 test-scenarios*.js
+
+# Generated report files
+*_REPORT.md
+*_STATUS.md
+*_CONFIRMATION*.md
+test-agent-system.ts

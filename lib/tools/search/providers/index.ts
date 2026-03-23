@@ -13,6 +13,14 @@ export type SearchProviderType =
   | 'brave'
 export const DEFAULT_PROVIDER: SearchProviderType = 'tavily'
 
+const PROVIDER_ENV_CHECKS: Record<SearchProviderType, () => boolean> = {
+  tavily: () => Boolean(process.env.TAVILY_API_KEY),
+  exa: () => Boolean(process.env.EXA_API_KEY),
+  searxng: () => Boolean(process.env.SEARXNG_API_URL),
+  firecrawl: () => Boolean(process.env.FIRECRAWL_API_KEY),
+  brave: () => Boolean(process.env.BRAVE_SEARCH_API_KEY)
+}
+
 export function createSearchProvider(
   type?: SearchProviderType
 ): SearchProvider {
@@ -34,6 +42,41 @@ export function createSearchProvider(
       // Default to TavilySearchProvider if an unknown provider is specified
       return new TavilySearchProvider()
   }
+}
+
+export function isSearchProviderConfigured(type: SearchProviderType): boolean {
+  return PROVIDER_ENV_CHECKS[type]()
+}
+
+export function getSearchProviderFallbackOrder(input?: {
+  type?: 'general' | 'optimized'
+  primary?: SearchProviderType
+}): SearchProviderType[] {
+  const uniqueProviders = new Set<SearchProviderType>()
+  const configuredPrimary =
+    input?.primary ||
+    (process.env.SEARCH_API as SearchProviderType) ||
+    DEFAULT_PROVIDER
+
+  if (input?.type === 'general' && isSearchProviderConfigured('brave')) {
+    uniqueProviders.add('brave')
+  }
+
+  uniqueProviders.add(configuredPrimary)
+
+  for (const candidate of [
+    'tavily',
+    'brave',
+    'exa',
+    'firecrawl',
+    'searxng'
+  ] satisfies SearchProviderType[]) {
+    if (isSearchProviderConfigured(candidate)) {
+      uniqueProviders.add(candidate)
+    }
+  }
+
+  return [...uniqueProviders]
 }
 
 export { BraveSearchProvider } from './brave'

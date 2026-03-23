@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
 
 import { researcher } from '@/lib/agents/researcher'
+import { applyIntellicaMindContext } from '@/lib/intellica'
 import { isTracingEnabled } from '@/lib/utils/telemetry'
 
 import { loadChat } from '../actions/chat'
@@ -21,7 +22,11 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { getTextFromParts, sanitizeModelMessages, sanitizeUIMessages } from '../utils/message-utils'
+import {
+  getTextFromParts,
+  sanitizeModelMessages,
+  sanitizeUIMessages
+} from '../utils/message-utils'
 import { perfLog, perfTime } from '../utils/perf-logging'
 
 import { persistStreamResults } from './helpers/persist-stream-results'
@@ -42,6 +47,7 @@ export async function createChatStreamResponse(
     model,
     chatId,
     userId,
+    assistantContext,
     trigger = 'submit-message',
     messageId,
     abortSignal,
@@ -106,6 +112,7 @@ export async function createChatStreamResponse(
     chatId,
     userId,
     modelId: `${model.providerId}:${model.id}`,
+    assistantContext: assistantContext ?? null,
     messageId,
     trigger,
     initialChat,
@@ -126,7 +133,13 @@ export async function createChatStreamResponse(
         perfLog(
           `prepareMessages - Invoked: trigger=${trigger}, isNewChat=${isNewChat}`
         )
-        const messagesToModel = await prepareMessages(context, message)
+        const preparedMessages = await prepareMessages(context, message)
+        const { messages: messagesToModel } = await applyIntellicaMindContext({
+          chatId,
+          messages: preparedMessages,
+          searchMode,
+          userId
+        })
         perfTime('prepareMessages completed (stream)', prepareStart)
 
         // Get the researcher agent with parent trace ID, search mode, and model type

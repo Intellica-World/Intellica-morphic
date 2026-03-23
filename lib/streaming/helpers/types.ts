@@ -5,6 +5,7 @@ export interface StreamContext {
   chatId: string
   userId: string
   modelId: string
+  assistantContext?: string | null
   messageId?: string
   trigger?: string
   initialChat: (Chat & { messages: UIMessage[] }) | null

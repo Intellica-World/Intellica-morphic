@@ -3,9 +3,17 @@
 import { useMemo, useState } from 'react'
 
 import { UseChatHelpers } from '@ai-sdk/react'
-import { Copy, ThumbsDown, ThumbsUp } from 'lucide-react'
+import {
+  Copy,
+  LoaderCircle,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
+  Volume2
+} from 'lucide-react'
 import { toast } from 'sonner'
 
+import { useVoicePlayback } from '@/hooks/use-voice-playback'
 import type { SearchResultItem } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import { cn } from '@/lib/utils'
@@ -49,6 +57,7 @@ export function MessageActions({
     if (!message) return ''
     return processCitations(message, citationMaps || {})
   }, [message, citationMaps])
+  const voicePlayback = useVoicePlayback(messageId, mappedMessage)
 
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const isLoading = status === 'submitted' || status === 'streaming'
@@ -61,6 +70,16 @@ export function MessageActions({
   async function handleCopy() {
     await navigator.clipboard.writeText(mappedMessage)
     toast.success('Message copied to clipboard')
+  }
+
+  async function handleVoicePlayback() {
+    try {
+      await voicePlayback.toggle()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Voice playback failed'
+      toast.error(message)
+    }
   }
 
   async function handleFeedback(score: number) {
@@ -107,6 +126,26 @@ export function MessageActions({
       )}
     >
       {reload && <RetryButton reload={reload} messageId={messageId} />}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handleVoicePlayback}
+        className="rounded-full"
+        disabled={isLoading}
+        title={
+          voicePlayback.isSpeaking
+            ? 'Stop voice playback'
+            : 'Play voice response'
+        }
+      >
+        {voicePlayback.isLoading ? (
+          <LoaderCircle size={14} className="animate-spin" />
+        ) : voicePlayback.isSpeaking ? (
+          <Square size={14} />
+        ) : (
+          <Volume2 size={14} />
+        )}
+      </Button>
       <Button
         variant="ghost"
         size="icon"

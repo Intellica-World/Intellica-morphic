@@ -25,23 +25,39 @@ export function ModelTypeSelector({
 }: {
   disabled?: boolean
 }) {
-  const [value, setValue] = useState<ModelType>('speed')
+  const fullModeEnabled =
+    process.env.NEXT_PUBLIC_FEATURE_INTELLICA_FULL_MODE_V1 !== 'false'
+  const defaultType: ModelType = fullModeEnabled ? 'quality' : 'speed'
+  const [value, setValue] = useState<ModelType>(defaultType)
   const [dropdownOpen, setDropdownOpen] = useState(false)
 
   useEffect(() => {
     if (disabled) {
-      setValue('speed')
-      setCookie('modelType', 'speed')
+      setValue(defaultType)
+      setCookie('modelType', defaultType)
       return
     }
     const savedType = getCookie('modelType')
     if (savedType && ['speed', 'quality'].includes(savedType)) {
-      setValue(savedType as ModelType)
+      if (fullModeEnabled) {
+        setValue(defaultType)
+        setCookie('modelType', defaultType)
+      } else {
+        setValue(savedType as ModelType)
+      }
+    } else {
+      setValue(defaultType)
+      setCookie('modelType', defaultType)
     }
-  }, [disabled])
+  }, [defaultType, disabled, fullModeEnabled])
 
   const handleTypeSelect = (type: ModelType) => {
-    if (disabled) return
+    if (disabled || fullModeEnabled) {
+      setValue(defaultType)
+      setCookie('modelType', defaultType)
+      return
+    }
+
     setValue(type)
     setCookie('modelType', type)
     setDropdownOpen(false)

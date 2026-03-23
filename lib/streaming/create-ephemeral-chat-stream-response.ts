@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
 
 import { researcher } from '@/lib/agents/researcher'
+import { applyIntellicaMindContext } from '@/lib/intellica'
 import { isTracingEnabled } from '@/lib/utils/telemetry'
 
 import {
@@ -19,7 +20,10 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { sanitizeModelMessages, sanitizeUIMessages } from '../utils/message-utils'
+import {
+  sanitizeModelMessages,
+  sanitizeUIMessages
+} from '../utils/message-utils'
 
 import { streamRelatedQuestions } from './helpers/stream-related-questions'
 import { stripReasoningParts } from './helpers/strip-reasoning-parts'
@@ -36,7 +40,14 @@ type EphemeralStreamConfig = Pick<
 export async function createEphemeralChatStreamResponse(
   config: EphemeralStreamConfig
 ): Promise<Response> {
-  const { messages, model, abortSignal, searchMode, modelType, chatId } = config
+  const {
+    messages,
+    model,
+    abortSignal,
+    searchMode = 'adaptive',
+    modelType,
+    chatId
+  } = config
 
   if (!messages || messages.length === 0) {
     return new Response('messages are required', {
@@ -70,8 +81,13 @@ export async function createEphemeralChatStreamResponse(
     execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
       try {
         const isOpenAI = `${model.providerId}:${model.id}`.startsWith('openai:')
+        const { messages: mindMessages } = await applyIntellicaMindContext({
+          chatId,
+          messages,
+          searchMode
+        })
         // Sanitize UIMessages BEFORE conversion — strips empty-image parts from DB history
-        const sanitizedUIMessages = sanitizeUIMessages(messages)
+        const sanitizedUIMessages = sanitizeUIMessages(mindMessages)
         const messagesToConvert = isOpenAI
           ? stripReasoningParts(sanitizedUIMessages)
           : sanitizedUIMessages

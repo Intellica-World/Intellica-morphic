@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const ALLOWED_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-]
+import { storeIntellicaUploadedFile } from '@/lib/intellica/uploads'
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,37 +19,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File is required' }, { status: 400 })
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: 'File too large (max 5MB)' },
-        { status: 400 }
-      )
-    }
-
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: 'Unsupported file type' },
-        { status: 400 }
-      )
-    }
-
-    // Convert file to base64 data URL — works for all users without cloud storage
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const base64 = buffer.toString('base64')
-    const dataUrl = `data:${file.type};base64,${base64}`
-
-    return NextResponse.json(
+    const result = await storeIntellicaUploadedFile(file)
+    const response = NextResponse.json(
       {
         success: true,
-        file: {
-          filename: file.name,
-          url: dataUrl,
-          mediaType: file.type,
-          type: 'file'
-        }
+        file: result.file,
+        receipt: result.receipt
       },
       { status: 200 }
     )
+
+    response.headers.set(
+      'x-intellica-upload-hardening',
+      result.receipt.hardeningApplied ? '1' : '0'
+    )
+    response.headers.set('x-intellica-upload-storage', result.receipt.storage)
+
+    return response
   } catch (err: any) {
     console.error('Upload Error:', err)
     return NextResponse.json(

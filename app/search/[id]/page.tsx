@@ -15,7 +15,7 @@ export async function generateMetadata(props: {
   const { id } = await props.params
   const userId = await getCurrentUserId()
 
-  const chat = await loadChat(id, userId)
+  const chat = await loadChat(id, userId ?? undefined)
 
   if (!chat) {
     return { title: 'Search' }
@@ -32,7 +32,7 @@ export default async function SearchPage(props: {
   const { id } = await props.params
   const userId = await getCurrentUserId()
 
-  const chat = await loadChat(id, userId)
+  const chat = await loadChat(id, userId ?? undefined)
 
   if (!chat) {
     notFound()

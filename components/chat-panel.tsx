@@ -5,9 +5,17 @@ import Textarea from 'react-textarea-autosize'
 import { useRouter } from 'next/navigation'
 
 import { UseChatHelpers } from '@ai-sdk/react'
-import { ArrowUp, ChevronDown, MessageCirclePlus, Square } from 'lucide-react'
+import {
+  ArrowUp,
+  ChevronDown,
+  LoaderCircle,
+  MessageCirclePlus,
+  Mic,
+  Square
+} from 'lucide-react'
 import { toast } from 'sonner'
 
+import { useVoiceInput } from '@/hooks/use-voice-input'
 import { UploadedFile } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import { cn } from '@/lib/utils'
@@ -73,6 +81,30 @@ export function ChatPanel({
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
   const { close: closeArtifact } = useArtifact()
   const isLoading = status === 'submitted' || status === 'streaming'
+  const voiceInput = useVoiceInput({
+    onTranscript: transcript => {
+      const nextValue = input.trim().length
+        ? `${input.trim()}\n${transcript}`
+        : transcript
+
+      handleInputChange({
+        target: { value: nextValue }
+      } as React.ChangeEvent<HTMLTextAreaElement>)
+
+      if (!input.trim().length) {
+        setTimeout(() => {
+          inputRef.current?.form?.requestSubmit()
+          setIsInputFocused(false)
+          inputRef.current?.blur()
+        }, INPUT_UPDATE_DELAY_MS)
+      } else {
+        inputRef.current?.focus()
+      }
+    },
+    onError: message => {
+      toast.error(message)
+    }
+  })
 
   const handleCompositionStart = () => setIsComposing(true)
 
@@ -230,7 +262,7 @@ export function ChatPanel({
           {/* Bottom menu area */}
           <div className="flex items-center justify-between p-3">
             <div className="flex items-center gap-2">
-              {(
+              {
                 <FileUploadButton
                   onFileSelect={async files => {
                     const newFiles: UploadedFile[] = files.map(file => ({
@@ -279,7 +311,38 @@ export function ChatPanel({
                     )
                   }}
                 />
-              )}
+              }
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn(
+                  'shrink-0 rounded-full',
+                  voiceInput.isRecording && 'border-red-500 text-red-500'
+                )}
+                disabled={
+                  isLoading ||
+                  isToolInvocationInProgress() ||
+                  voiceInput.isTranscribing ||
+                  !voiceInput.supported
+                }
+                onClick={voiceInput.toggleRecording}
+                title={
+                  voiceInput.isRecording
+                    ? 'Stop recording'
+                    : voiceInput.isTranscribing
+                      ? 'Transcribing voice input'
+                      : 'Record a voice message'
+                }
+              >
+                {voiceInput.isTranscribing ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : voiceInput.isRecording ? (
+                  <Square className="size-4" />
+                ) : (
+                  <Mic className="size-4" />
+                )}
+              </Button>
               <SearchModeSelector />
             </div>
             <div className="flex items-center gap-2">

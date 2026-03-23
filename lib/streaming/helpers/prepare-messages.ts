@@ -8,6 +8,7 @@ import {
   upsertMessage
 } from '@/lib/actions/chat'
 import { generateId } from '@/lib/db/schema'
+import { withIntellicaAssistantContext } from '@/lib/intellica/profile-context'
 import { perfLog, perfTime } from '@/lib/utils/perf-logging'
 
 import type { StreamContext } from './types'
@@ -18,11 +19,17 @@ export async function prepareMessages(
   context: StreamContext,
   message: UIMessage | null
 ): Promise<UIMessage[]> {
-  const { chatId, userId, trigger, messageId, initialChat, isNewChat } = context
+  const {
+    chatId,
+    userId,
+    trigger,
+    messageId,
+    initialChat,
+    isNewChat,
+    assistantContext
+  } = context
   const startTime = performance.now()
   perfLog(`prepareMessages - Start: trigger=${trigger}, isNewChat=${isNewChat}`)
-
-  let messagesToReturn: UIMessage[] = []
 
   if (trigger === 'regenerate-message' && messageId) {
     // Handle regeneration - use initialChat if available to avoid DB call
@@ -61,8 +68,9 @@ export async function prepareMessages(
       await deleteMessagesFromIndex(chatId, messageId, userId)
       // Reload chat to get the updated message list after deletion
       const updatedChat = await loadChat(chatId, userId)
-      return (
-        updatedChat?.messages || currentChat.messages.slice(0, messageIndex)
+      return withIntellicaAssistantContext(
+        updatedChat?.messages || currentChat.messages.slice(0, messageIndex),
+        assistantContext
       )
     } else {
       // User message edit
@@ -74,8 +82,10 @@ export async function prepareMessages(
         await deleteMessagesFromIndex(chatId, messagesToDelete[0].id, userId)
       }
       const updatedChat = await loadChat(chatId, userId)
-      return (
-        updatedChat?.messages || currentChat.messages.slice(0, messageIndex + 1)
+      return withIntellicaAssistantContext(
+        updatedChat?.messages ||
+          currentChat.messages.slice(0, messageIndex + 1),
+        assistantContext
       )
     }
   } else {
@@ -113,7 +123,7 @@ export async function prepareMessages(
       context.pendingInitialUserMessage = messageWithId
 
       perfTime('prepareMessages - Return (optimistic)', startTime)
-      return [messageWithId]
+      return withIntellicaAssistantContext([messageWithId], assistantContext)
     }
 
     // For existing chats
@@ -130,7 +140,10 @@ export async function prepareMessages(
     // If we have initialChat, append the new message instead of fetching all messages
     if (initialChat && initialChat.messages) {
       perfTime('prepareMessages - Total (using cached chat)', startTime)
-      return [...initialChat.messages, messageWithId]
+      return withIntellicaAssistantContext(
+        [...initialChat.messages, messageWithId],
+        assistantContext
+      )
     }
 
     // Fallback to fetching if no initialChat
@@ -138,6 +151,9 @@ export async function prepareMessages(
     const updatedChat = await loadChat(chatId, userId)
     perfTime('loadChat (fallback) completed', loadStart)
     perfTime('prepareMessages - Total', startTime)
-    return updatedChat?.messages || [messageWithId]
+    return withIntellicaAssistantContext(
+      updatedChat?.messages || [messageWithId],
+      assistantContext
+    )
   }
 }

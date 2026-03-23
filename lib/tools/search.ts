@@ -11,6 +11,7 @@ import { getBaseUrlString } from '@/lib/utils/url'
 import {
   createSearchProvider,
   DEFAULT_PROVIDER,
+  getSearchProviderFallbackOrder,
   SearchProviderType
 } from './search/providers'
 
@@ -48,7 +49,7 @@ export function createSearchTool(fullModel: string) {
 
       // Use the original query as is - any provider-specific handling will be done in the provider
       const filledQuery = query
-      let searchResult: SearchResults
+      let searchResult: SearchResults | null = null
 
       // Determine which provider to use based on type
       let searchAPI: SearchProviderType
@@ -71,74 +72,90 @@ export function createSearchTool(fullModel: string) {
           (process.env.SEARCH_API as SearchProviderType) || DEFAULT_PROVIDER
       }
 
-      const effectiveSearchDepthForAPI =
-        searchAPI === 'searxng' &&
-        process.env.SEARXNG_DEFAULT_DEPTH === 'advanced'
-          ? 'advanced'
-          : effectiveSearchDepth || 'basic'
+      const providerOrder = getSearchProviderFallbackOrder({
+        primary: searchAPI,
+        type: type as 'general' | 'optimized'
+      })
 
-      console.log(
-        `Using search API: ${searchAPI}, Type: ${type}, Search Depth: ${effectiveSearchDepthForAPI}`
-      )
+      let lastError: Error | null = null
 
-      try {
-        if (
-          searchAPI === 'searxng' &&
-          effectiveSearchDepthForAPI === 'advanced'
-        ) {
-          // Get the base URL using the centralized utility function
-          const baseUrl = await getBaseUrlString()
+      for (const providerType of providerOrder) {
+        const effectiveSearchDepthForAPI =
+          providerType === 'searxng' &&
+          process.env.SEARXNG_DEFAULT_DEPTH === 'advanced'
+            ? 'advanced'
+            : effectiveSearchDepth || 'basic'
 
-          const response = await fetch(`${baseUrl}/api/advanced-search`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: filledQuery,
-              maxResults: effectiveMaxResults,
-              searchDepth: effectiveSearchDepthForAPI,
-              includeDomains: include_domains,
-              excludeDomains: exclude_domains
+        console.log(
+          `Using search API: ${providerType}, Type: ${type}, Search Depth: ${effectiveSearchDepthForAPI}`
+        )
+
+        try {
+          if (
+            providerType === 'searxng' &&
+            effectiveSearchDepthForAPI === 'advanced'
+          ) {
+            const baseUrl = await getBaseUrlString()
+
+            const response = await fetch(`${baseUrl}/api/advanced-search`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                query: filledQuery,
+                maxResults: effectiveMaxResults,
+                searchDepth: effectiveSearchDepthForAPI,
+                includeDomains: include_domains,
+                excludeDomains: exclude_domains
+              })
             })
-          })
-          if (!response.ok) {
-            throw new Error(
-              `Advanced search API error: ${response.status} ${response.statusText}`
-            )
-          }
-          searchResult = await response.json()
-        } else {
-          // Use the provider factory to get the appropriate search provider
-          const searchProvider = createSearchProvider(searchAPI)
-
-          // Pass content_types only for Brave provider
-          if (searchAPI === 'brave') {
-            searchResult = await searchProvider.search(
-              filledQuery,
-              effectiveMaxResults,
-              effectiveSearchDepthForAPI,
-              include_domains,
-              exclude_domains,
-              {
-                type: type as 'general' | 'optimized',
-                content_types: content_types as Array<
-                  'web' | 'video' | 'image' | 'news'
-                >
-              }
-            )
+            if (!response.ok) {
+              throw new Error(
+                `Advanced search API error: ${response.status} ${response.statusText}`
+              )
+            }
+            searchResult = await response.json()
           } else {
-            searchResult = await searchProvider.search(
-              filledQuery,
-              effectiveMaxResults,
-              effectiveSearchDepthForAPI,
-              include_domains,
-              exclude_domains
-            )
+            const searchProvider = createSearchProvider(providerType)
+
+            if (providerType === 'brave') {
+              searchResult = await searchProvider.search(
+                filledQuery,
+                effectiveMaxResults,
+                effectiveSearchDepthForAPI,
+                include_domains,
+                exclude_domains,
+                {
+                  type: type as 'general' | 'optimized',
+                  content_types: content_types as Array<
+                    'web' | 'video' | 'image' | 'news'
+                  >
+                }
+              )
+            } else {
+              searchResult = await searchProvider.search(
+                filledQuery,
+                effectiveMaxResults,
+                effectiveSearchDepthForAPI,
+                include_domains,
+                exclude_domains
+              )
+            }
           }
+
+          searchAPI = providerType
+          break
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error : new Error('Unknown search error')
+          console.error(
+            `[Search] Provider ${providerType} failed, trying next provider if available:`,
+            lastError
+          )
         }
-      } catch (error) {
-        console.error('Search API error:', error)
-        // Re-throw the error to let AI SDK handle it properly
-        throw error instanceof Error ? error : new Error('Unknown search error')
+      }
+
+      if (!searchResult) {
+        throw lastError || new Error('Search failed')
       }
 
       // Add citation mapping and toolCallId to search results

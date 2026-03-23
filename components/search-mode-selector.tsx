@@ -19,7 +19,10 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 
 export function SearchModeSelector() {
-  const [value, setValue] = useState<SearchMode>('quick')
+  const fullModeEnabled =
+    process.env.NEXT_PUBLIC_FEATURE_INTELLICA_FULL_MODE_V1 !== 'false'
+  const defaultMode: SearchMode = fullModeEnabled ? 'adaptive' : 'quick'
+  const [value, setValue] = useState<SearchMode>(defaultMode)
   const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({})
   const [openHoverCard, setOpenHoverCard] = useState<string | null>(null)
   const [justSelected, setJustSelected] = useState(false)
@@ -29,13 +32,21 @@ export function SearchModeSelector() {
   useEffect(() => {
     const savedMode = getCookie('searchMode')
     if (savedMode && ['quick', 'adaptive'].includes(savedMode)) {
-      setValue(savedMode as SearchMode)
+      if (fullModeEnabled) {
+        setCookie('searchMode', defaultMode)
+        setValue(defaultMode)
+      } else {
+        setValue(savedMode as SearchMode)
+      }
     } else if (savedMode) {
       // Clean up invalid cookie value (e.g., old 'planning' mode)
-      setCookie('searchMode', 'quick')
-      setValue('quick')
+      setCookie('searchMode', defaultMode)
+      setValue(defaultMode)
+    } else {
+      setCookie('searchMode', defaultMode)
+      setValue(defaultMode)
     }
-  }, [])
+  }, [defaultMode, fullModeEnabled])
 
   useEffect(() => {
     // Update indicator position when value changes
@@ -54,6 +65,12 @@ export function SearchModeSelector() {
   }, [value])
 
   const handleModeSelect = (mode: SearchMode) => {
+    if (fullModeEnabled) {
+      setValue(defaultMode)
+      setCookie('searchMode', defaultMode)
+      return
+    }
+
     setValue(mode)
     setCookie('searchMode', mode)
     setOpenHoverCard(null) // Close hover card on selection
