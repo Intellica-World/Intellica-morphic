@@ -29,15 +29,19 @@ interface UseVoiceInputOptions {
 
 export function useVoiceInput({ onError, onTranscript }: UseVoiceInputOptions) {
   const [status, setStatus] = useState<VoiceInputStatus>('idle')
+  const [supported, setSupported] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
-  const supported =
-    typeof window !== 'undefined' &&
-    typeof navigator !== 'undefined' &&
-    typeof navigator.mediaDevices?.getUserMedia === 'function' &&
-    typeof MediaRecorder !== 'undefined'
+  useEffect(() => {
+    setSupported(
+      typeof window !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      typeof navigator.mediaDevices?.getUserMedia === 'function' &&
+      typeof MediaRecorder !== 'undefined'
+    )
+  }, [])
 
   const resetMediaState = useCallback(() => {
     mediaRecorderRef.current = null
