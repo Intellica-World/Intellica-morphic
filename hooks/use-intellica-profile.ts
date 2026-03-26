@@ -64,9 +64,15 @@ export function useIntellicaProfile() {
   const locationFeatureEnabled =
     process.env.NEXT_PUBLIC_FEATURE_INTELLICA_LOCATION_V1 !== 'false'
 
+  const [mounted, setMounted] = useState(false)
   const [storedProfile, setStoredProfile] = useState<IntellicaStoredProfile>(
-    () => readStoredProfile()
+    { deviceId: 'server-render' }
   )
+
+  useEffect(() => {
+    setStoredProfile(readStoredProfile())
+    setMounted(true)
+  }, [])
 
   const geolocation = useGeolocation(
     profileFeatureEnabled &&
@@ -124,6 +130,7 @@ export function useIntellicaProfile() {
     profile: storedProfile,
     saveDisplayName,
     shouldPromptForName:
+      mounted &&
       profileFeatureEnabled &&
       !storedProfile.displayName &&
       !storedProfile.dismissedNamePrompt,
