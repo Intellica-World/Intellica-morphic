@@ -51,9 +51,11 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
+  // Skip auth redirect entirely when ENABLE_AUTH is disabled
+  const authEnabled = process.env.ENABLE_AUTH !== 'false'
+
   // Redirect to login if the user is not authenticated and the path is not public
-  if (!user && !publicPaths.some(path => pathname.startsWith(path))) {
-    // no user, potentially respond by redirecting the user to the login page
+  if (authEnabled && !user && !publicPaths.some(path => pathname.startsWith(path))) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
