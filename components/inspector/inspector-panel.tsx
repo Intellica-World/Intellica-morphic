@@ -5,7 +5,8 @@ import {
   ListTodo,
   MessageSquare,
   Minimize2,
-  Search
+  Search,
+  Wand2
 } from 'lucide-react'
 
 import { Separator } from '@/components/ui/separator'
@@ -34,6 +35,11 @@ export function InspectorPanel() {
         return {
           icon: <ListTodo size={18} />,
           title: 'Todo List'
+        }
+      case 'vibe-coding':
+        return {
+          icon: <Wand2 size={18} className="text-violet-500" />,
+          title: 'Vibe Coding'
         }
       case 'reasoning':
         return {
@@ -78,7 +84,7 @@ export function InspectorPanel() {
           </div>
           <Separator className="my-1 bg-border/50" />
           <div data-vaul-no-drag className="flex-1 overflow-y-auto p-4">
-            <ArtifactContent part={part} />
+            <ArtifactContent part={part} onClose={close} />
           </div>
         </div>
       </div>

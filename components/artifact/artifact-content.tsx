@@ -1,20 +1,37 @@
 'use client'
 
-import { Part, ToolPart } from '@/lib/types/ai'
+import { Part, ToolPart, VibeCodingPart } from '@/lib/types/ai'
+import { VibeCodingPanel } from '@/components/vibe-coding-panel'
 
 import { ReasoningContent } from './reasoning-content'
 import { TodoInvocationContent } from './todo-invocation-content'
 import { ToolInvocationContent } from './tool-invocation-content'
 
-// Type guard for Todo tool parts
 function isTodoToolPart(part: Part): part is ToolPart<'todoWrite'> {
   return part.type === 'tool-todoWrite'
 }
 
-export function ArtifactContent({ part }: { part: Part | null }) {
+function isVibeCodingPart(part: Part): part is VibeCodingPart {
+  return part.type === 'vibe-coding'
+}
+
+export function ArtifactContent({ part, onClose }: { part: Part | null; onClose?: () => void }) {
   if (!part) return null
 
   switch (part.type) {
+    case 'vibe-coding':
+      if (isVibeCodingPart(part)) {
+        return (
+          <VibeCodingPanel
+            prompt={part.prompt}
+            type={part.buildType}
+            uiStyle={part.uiStyle}
+            platform={part.platform}
+            onClose={onClose}
+          />
+        )
+      }
+      return null
     case 'tool-search':
     case 'tool-fetch':
     case 'tool-askQuestion':

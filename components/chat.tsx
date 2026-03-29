@@ -27,6 +27,9 @@ import {
 } from '@/hooks/use-guest-chat-session'
 import { useIntellicaProfile } from '@/hooks/use-intellica-profile'
 
+import { useArtifact } from '@/components/artifact/artifact-context'
+import { detectVibeCoding } from '@/lib/vibe-coding/detector'
+
 import { ChatMessages } from './chat-messages'
 import { ChatPanel } from './chat-panel'
 import { DragOverlay } from './drag-overlay'
@@ -86,6 +89,8 @@ export function Chat({
     shouldPromptForName,
     userProfile
   } = useIntellicaProfile()
+
+  const { open: openArtifact } = useArtifact()
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -446,6 +451,22 @@ export function Chat({
     const uploaded = uploadedFiles.filter(f => f.status === 'uploaded')
 
     if (input.trim() || uploaded.length > 0) {
+      // Intercept vibe coding requests (only when no files attached)
+      if (input.trim() && uploaded.length === 0) {
+        const detection = detectVibeCoding(input.trim())
+        if (detection.isVibeCoding) {
+          openArtifact({
+            type: 'vibe-coding',
+            prompt: input.trim(),
+            buildType: detection.type,
+            uiStyle: detection.uiStyle,
+            platform: detection.platform,
+          })
+          setInput('')
+          return
+        }
+      }
+
       const parts: any[] = []
 
       if (input.trim()) {

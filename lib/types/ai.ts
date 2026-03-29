@@ -69,4 +69,13 @@ export type ToolPart<T extends keyof UITools = keyof UITools> = {
   errorText?: string
 }
 
-export type Part = TextPart | ReasoningPart | ToolPart
+// Vibe Coding part — injected client-side when vibe coding is triggered
+export type VibeCodingPart = {
+  type: 'vibe-coding'
+  prompt: string
+  buildType: string
+  uiStyle: string
+  platform: string
+}
+
+export type Part = TextPart | ReasoningPart | ToolPart | VibeCodingPart
